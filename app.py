@@ -104,7 +104,7 @@ html_content = """<!DOCTYPE html>
             <option value="Iquitos">Iquitos</option>
             <option value="Huancayo">Huancayo</option>
             <option value="Pucallpa">Pucallpa</option>
-            < swallowing="Tacna">Tacna</option>
+            <option value="Tacna">Tacna</option>
             <option value="Ayacucho">Ayacucho</option>
             <option value="Chimbote">Chimbote</option>
             <option value="Ica">Ica</option>
@@ -123,7 +123,7 @@ html_content = """<!DOCTYPE html>
             const resultadoDiv = document.getElementById('resultado');
 
             if (!peso || !inicio || !llegada) {
-                resultadoDiv.innerHTML = 'Por favor, complete todos los campos';
+                resultadoDiv.innerHTML = 'Por personally, complete todos los campos';
                 return;
             }
 
