@@ -1,11 +1,19 @@
 from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 import tensorflow as tf
 import pandas as pd
 import pickle
 import numpy as np
 import os
 
+# Suprimir advertencias de TensorFlow y deshabilitar GPU
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suprime advertencias (0 = todas, 3 = ninguna)
+os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Fuerza uso de CPU
+
 app = Flask(__name__)
+
+# Habilitar CORS para permitir solicitudes desde otros dominios
+CORS(app)
 
 # Configuración para archivos estáticos
 app.static_folder = 'static'
@@ -96,7 +104,7 @@ html_content = """<!DOCTYPE html>
             <option value="Iquitos">Iquitos</option>
             <option value="Huancayo">Huancayo</option>
             <option value="Pucallpa">Pucallpa</option>
-            <option value="Tacna">Tacna</option>
+            < swallowing="Tacna">Tacna</option>
             <option value="Ayacucho">Ayacucho</option>
             <option value="Chimbote">Chimbote</option>
             <option value="Ica">Ica</option>
@@ -128,12 +136,20 @@ html_content = """<!DOCTYPE html>
                     body: JSON.stringify({ peso, inicio, llegada })
                 });
 
-                const data = await response.json();
+                console.log('Status:', response.status);
+                console.log('Content-Type:', response.headers.get('Content-Type'));
+                const text = await response.text();
+                console.log('Response body:', text);
 
-                if (response.ok) {
-                    resultadoDiv.innerHTML = `Precio estimado: ${data.precio_predicho}`;
-                } else {
-                    resultadoDiv.innerHTML = `Error: ${data.error}`;
+                try {
+                    const data = JSON.parse(text);
+                    if (response.ok) {
+                        resultadoDiv.innerHTML = `Precio estimado: ${data.precio_predicho}`;
+                    } else {
+                        resultadoDiv.innerHTML = `Error: ${data.error || 'Error desconocido'}`;
+                    }
+                } catch (e) {
+                    resultadoDiv.innerHTML = `Error: Respuesta no es JSON válido: ${text}`;
                 }
             } catch (error) {
                 resultadoDiv.innerHTML = `Error: ${error.message}`;
@@ -184,52 +200,55 @@ def home():
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
-        # Get data from JSON
         data = request.get_json()
+        print(f"Datos recibidos: {data}")
         if not data:
+            print("Error: No se recibieron datos JSON")
             return jsonify({'error': 'No se recibieron datos JSON'}), 400
             
         peso = float(data.get('peso', 0))
         inicio = data.get('inicio', '')
         llegada = data.get('llegada', '')
 
-        # Validate input
+        print(f"Peso: {peso}, Inicio: {inicio}, Llegada: {llegada}")
+
         if not all([peso, inicio, llegada]):
+            print("Error: Faltan datos requeridos")
             return jsonify({'error': 'Faltan datos requeridos'}), 400
         if inicio not in ciudades or llegada not in ciudades:
+            print("Error: Ciudad no válida")
             return jsonify({'error': 'Ciudad no válida'}), 400
         if peso <= 0:
+            print("Error: El peso debe ser mayor que 0")
             return jsonify({'error': 'El peso debe ser mayor que 0'}), 400
 
-        # Create DataFrame for new shipment
         nuevo_envio = pd.DataFrame({
             'Peso': [peso],
             'Inicio': [inicio],
             'Llegada': [llegada]
         })
 
-        # Encode cities
+        print("Transformando ciudades...")
         nuevo_envio['Inicio_encoded'] = le_inicio.transform(nuevo_envio['Inicio'])
         nuevo_envio['Llegada_encoded'] = le_llegada.transform(nuevo_envio['Llegada'])
 
-        # Create one-hot encoding
         nuevo_inicio_onehot = pd.get_dummies(nuevo_envio['Inicio'], prefix='Inicio')
         nuevo_llegada_onehot = pd.get_dummies(nuevo_envio['Llegada'], prefix='Llegada')
 
-        # Ensure columns match training data
         for col in X_train_columns:
             if col not in nuevo_inicio_onehot.columns and 'Inicio' in col:
                 nuevo_inicio_onehot[col] = 0
             if col not in nuevo_llegada_onehot.columns and 'Llegada' in col:
                 nuevo_llegada_onehot[col] = 0
 
-        # Combine features
         nuevo_X = pd.concat([nuevo_envio[['Peso']], nuevo_inicio_onehot, nuevo_llegada_onehot], axis=1)
-        nuevo_X = nuevo_X[X_train_columns]
+        print(f"Columnas de nuevo_X: {nuevo_X.columns.tolist()}")
 
-        # Make prediction
+        nuevo_X = nuevo_X[X_train_columns]
+        print("Realizando predicción...")
         prediccion = model.predict(nuevo_X, verbose=0)
         precio_predicho = float(prediccion[0][0])
+        print(f"Predicción: {precio_predicho}")
 
         return jsonify({'precio_predicho': f'{precio_predicho:.2f} soles'})
 
@@ -240,4 +259,6 @@ def predict():
         return jsonify({'error': f'Error en la predicción: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    import os
+    port = int(os.environ.get('PORT', 5000))  # Usa el puerto de Render o 5000 por defecto
+    app.run(debug=False, host='0.0.0.0', port=port)
