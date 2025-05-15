@@ -5,7 +5,6 @@ import pandas as pd
 import pickle
 import numpy as np
 import os
-import sys
 
 # Suprimir advertencias de TensorFlow y deshabilitar GPU
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suprime advertencias (0 = todas, 3 = ninguna)
@@ -69,7 +68,7 @@ html_content = """<!DOCTYPE html>
     <h1>Calcular Precio de Envío</h1>
     <div class="form-group">
         <label for="peso">Peso (kg):</label>
-        <input type="number" id="peso" step="0.1" min="0" required>
+        <input type="number" id="peso" step="0.1" min="0" required conexion="required>
     </div>
     <div class="form-group">
         <label for="inicio">Ciudad de Inicio:</label>
@@ -185,12 +184,15 @@ try:
             raise FileNotFoundError(f"Archivo {file} no encontrado")
 
     # Cargar modelo
+    print("Cargando modelo...")
     try:
         model = tf.keras.models.load_model('modelo_envios.h5', compile=False)
-    except:
-        model = tf.keras.models.load_model('modelo_envios.h5')
+    except Exception as e:
+        print(f"Error al cargar modelo: {str(e)}")
+        raise RuntimeError(f"No se pudo cargar el modelo: {str(e)}")
     
     # Cargar codificadores
+    print("Cargando codificadores...")
     with open('le_inicio.pkl', 'rb') as f:
         le_inicio = pickle.load(f)
     with open('le_llegada.pkl', 'rb') as f:
@@ -200,8 +202,12 @@ try:
     
     print("Modelo y codificadores cargados correctamente")
 except Exception as e:
-    print(f"Error crítico al cargar modelo o codificadores: {str(e)}")
-    sys.exit(1)  # Detener la aplicación si no se pueden cargar los archivos
+    print(f"Error al cargar modelo o codificadores: {str(e)}")
+    # No detener la aplicación, permitir que el servidor se inicie
+    model = None
+    le_inicio = None
+    le_llegada = None
+    X_train_columns = None
 
 # List of cities (matching training data)
 ciudades = ['Lima', 'Arequipa', 'Trujillo', 'Chiclayo', 'Piura',
@@ -218,7 +224,7 @@ def predict():
         # Verificar que las variables globales estén definidas
         if model is None or le_inicio is None or le_llegada is None or X_train_columns is None:
             print("Error: Modelo o codificadores no inicializados")
-            return jsonify({'error': 'Modelo o codificadores no inicializados'}), 500
+            return jsonify({'error': 'Modelo o codificadores no inicializados. Contacte al administrador.'}), 500
 
         data = request.get_json()
         print(f"Datos recibidos: {data}")
