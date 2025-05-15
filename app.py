@@ -5,6 +5,7 @@ import pandas as pd
 import pickle
 import numpy as np
 import os
+import sys
 
 # Suprimir advertencias de TensorFlow y deshabilitar GPU
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suprime advertencias (0 = todas, 3 = ninguna)
@@ -123,7 +124,7 @@ html_content = """<!DOCTYPE html>
             const resultadoDiv = document.getElementById('resultado');
 
             if (!peso || !inicio || !llegada) {
-                resultadoDiv.innerHTML = 'Por personally, complete todos los campos';
+                resultadoDiv.innerHTML = 'Por favor, complete todos los campos';
                 return;
             }
 
@@ -163,30 +164,44 @@ html_content = """<!DOCTYPE html>
 with open(os.path.join(app.static_folder, 'index.html'), 'w', encoding='utf-8') as f:
     f.write(html_content)
 
-# Load model and encoders
+# Definir variables globales
+model = None
+le_inicio = None
+le_llegada = None
+X_train_columns = None
+
+# Cargar modelo y codificadores
 try:
-    # Manejar cambios de versiones en TensorFlow
+    print("Verificando archivos...")
+    files = {
+        'modelo_envios.h5': os.path.exists('modelo_envios.h5'),
+        'le_inicio.pkl': os.path.exists('le_inicio.pkl'),
+        'le_llegada.pkl': os.path.exists('le_llegada.pkl'),
+        'X_train_columns.pkl': os.path.exists('X_train_columns.pkl')
+    }
+    for file, exists in files.items():
+        print(f"Archivo {file} existe: {exists}")
+        if not exists:
+            raise FileNotFoundError(f"Archivo {file} no encontrado")
+
+    # Cargar modelo
     try:
-        # Para TensorFlow 2.16+
         model = tf.keras.models.load_model('modelo_envios.h5', compile=False)
     except:
-        # Para versiones anteriores
         model = tf.keras.models.load_model('modelo_envios.h5')
-        
+    
+    # Cargar codificadores
     with open('le_inicio.pkl', 'rb') as f:
         le_inicio = pickle.load(f)
     with open('le_llegada.pkl', 'rb') as f:
         le_llegada = pickle.load(f)
     with open('X_train_columns.pkl', 'rb') as f:
         X_train_columns = pickle.load(f)
+    
     print("Modelo y codificadores cargados correctamente")
 except Exception as e:
-    print(f"Error al cargar modelo o codificadores: {str(e)}")
-    # Verificar si los archivos existen
-    print(f"Archivo modelo_envios.h5 existe: {os.path.exists('modelo_envios.h5')}")
-    print(f"Archivo le_inicio.pkl existe: {os.path.exists('le_inicio.pkl')}")
-    print(f"Archivo le_llegada.pkl existe: {os.path.exists('le_llegada.pkl')}")
-    print(f"Archivo X_train_columns.pkl existe: {os.path.exists('X_train_columns.pkl')}")
+    print(f"Error crítico al cargar modelo o codificadores: {str(e)}")
+    sys.exit(1)  # Detener la aplicación si no se pueden cargar los archivos
 
 # List of cities (matching training data)
 ciudades = ['Lima', 'Arequipa', 'Trujillo', 'Chiclayo', 'Piura',
@@ -200,6 +215,11 @@ def home():
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
+        # Verificar que las variables globales estén definidas
+        if model is None or le_inicio is None or le_llegada is None or X_train_columns is None:
+            print("Error: Modelo o codificadores no inicializados")
+            return jsonify({'error': 'Modelo o codificadores no inicializados'}), 500
+
         data = request.get_json()
         print(f"Datos recibidos: {data}")
         if not data:
